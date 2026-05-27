@@ -1,0 +1,7 @@
+{
+  "name": "angular-kenya-talk",
+  "compatibility_date": "2026-05-28",
+  "assets": {
+    "directory": "./dist/angular-kenya-talk/browser"
+  }
+}
