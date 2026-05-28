@@ -29,7 +29,7 @@ export const SLIDES: Slide[] = [
   { slug: 'push-poll-pull', title: 'Push, Poll, Pull', image: 'push-poll-pull.png' },
   { slug: 'templates-become-reactive-consumers', title: 'Templates Become Reactive Consumers', image: 'templates-become-reactive-consumers.png' },
   { slug: 'from-one-pass-to-synchronization', title: 'From One Pass to Synchronization', image: 'from-one-pass-to-synchronization.png' },
-  { slug: 'ng0100-revisited-with-signals', title: 'NG0100 Revisited with Signals', image: 'ng0100-revisited-with-signals.png' },
+  { slug: 'signals-change-the-timing-story', title: 'Signals Change the Timing Story', image: 'signals-change-the-timing-story.png' },
   { slug: 'thank-you', title: 'Thank You', image: 'thank-you.png' },
 ];
 
