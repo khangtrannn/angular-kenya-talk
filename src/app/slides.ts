@@ -27,7 +27,7 @@ export const SLIDES: Slide[] = [
   { slug: 'the-same-example-with-signals', title: 'The Same Example with Signals', image: 'the-same-example-with-signals.png' },
   { slug: 'signals-build-a-reactive-graph', title: 'Signals Build a Reactive Graph', image: 'signals-build-a-reactive-graph.png' },
   { slug: 'push-poll-pull', title: 'Push, Poll, Pull', image: 'push-poll-pull.png' },
-  { slug: 'the-templates-become-reactive-consumers', title: 'Templates Become Reactive Consumers', image: 'the-templates-become-reactive-consumers.png' },
+  { slug: 'templates-become-reactive-consumers', title: 'Templates Become Reactive Consumers', image: 'templates-become-reactive-consumers.png' },
   { slug: 'from-one-pass-to-synchronization', title: 'From One Pass to Synchronization', image: 'from-one-pass-to-synchronization.png' },
   { slug: 'ng0100-revisited-with-signals', title: 'NG0100 Revisited with Signals', image: 'ng0100-revisited-with-signals.png' },
   { slug: 'thank-you', title: 'Thank You', image: 'thank-you.png' },
