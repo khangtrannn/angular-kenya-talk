@@ -39,9 +39,13 @@ Signals:
 ## Slide 1.1 — Introduction
 
 > **Speaker note:**
-> [Brief self-introduction — name, author of @ng-brutalism/ui, current work.]
+> "Hi everyone, I'm Khang, a software engineer from Vietnam.
 >
-> "So, what I want to do today is kind of take you guys along on some of the things I've learned about Angular Change Detection and Signals.
+> Besides that, I'm currently on a career break, and during this time I'm building my Angular UI library, `@ng-brutalism/ui`.
+>
+> This is actually my first time speaking at a webinar.
+>
+> So, what I want to do today is kind of take you guys along on some of the things I've learned about Angular Change Detection and Signals.
 >
 > And I am not an expert in any of this, so this is going to be me taking you along on my learning journey and nothing more.
 >
@@ -52,64 +56,61 @@ Signals:
 ## Slide 1.2 — The Error Message
 
 > **Speaker note:**
-> "It started with this error.
+> "If you have worked with Angular for a while, I bet you have encountered this error at least once:
 >
-> `NG0100: ExpressionChangedAfterItHasBeenCheckedError`.
->
-> Expression has changed after it was checked. Previous value: 'John'. Current value: 'Doe'.
->
-> I was working on an Angular app and this thing just showed up in my console. I had no idea what it meant. The values looked fine. The data was correct. But Angular was throwing at me anyway."
+> `ExpressionChangedAfterItHasBeenCheckedError`."
 
 ---
 
 ## Slide 1.3 — Stack Overflow
 
 > **Speaker note:**
-> "Back then, there was no AI or LLM. So I did what every developer does — I went to our old friend Stack Overflow.
+> "Back then, there was no AI or LLM explaining errors to us. So I did what every developer did — I went to our old friend Stack Overflow.
 >
-> And I found a solution very quickly. Wrap the mutation in a `setTimeout`. And it worked.
+> And I found a solution very quickly: wrap the mutation in a `setTimeout`.
 >
-> The error was gone. The UI updated correctly. Everything looked fine.
+> It worked. The error disappeared.
 >
-> But I had two questions that I couldn't shake.
+> But the comments were basically saying: don’t do this.
 >
-> First — *why* does this work? What is `setTimeout` actually doing here that makes Angular happy?
->
-> And second — why does everyone in the comments say 'yes this fixes it, but don't do this, it's a bad practice'?
->
-> I used it anyway, because I had a deadline. But those two questions stayed with me."
+> But I didn’t really understand why."
 
 ---
 
-## Slide 1.4 — Angular RFC
+## Slide 1.4 — Two Important Questions
 
 > **Speaker note:**
-> "A while later, I came across this Angular RFC.
+> "And that left me with two questions.
+>
+> First: why does Angular throw `NG0100`?
+>
+> Second: why does `setTimeout` make it disappear, while still being considered a bad practice?
+>
+
+---
+
+## Slide 1.5 — Angular RFC
+
+> **Speaker note:**
+> "Then, back in 2023, when the Angular renaissance started, Angular published the Signals RFC — a new reactive primitive for the framework.
+>
+> A lot of things in that RFC were interesting, but this line caught my attention:
 >
 > 'Better guardrails to avoid common pitfalls that lead to poor change detection performance and avoid common pain points such as ExpressionChangedAfterItHasBeenChecked errors.'
 >
-> The Angular team was working on something specifically to address this class of problems.
+> And honestly, that confused me.
 >
-> That told me this wasn't just me struggling. This was a real pain point, at the framework level.
+> Signals were reactive state. `NG0100` was a change detection error.
 >
-> And it made me want to actually understand what was going on — not just patch it with `setTimeout` and move on."
+> Why were they in the same story?
+>
+> How could a new state primitive help Angular avoid this kind of timing error?
+>
+> That question is what pushed me to go deeper into Angular change detection.
+>
 
----
-
-## Slide 1.5 — Three Important Questions
-
-> **Speaker note:**
-> "So today, the whole talk is built around three questions.
->
-> One: why is `setTimeout` a bad practice — even when it works?
->
-> Two: why does Angular throw `ExpressionChangedAfterItHasBeenCheckedError` in the first place?
->
-> Three: why can Signals help us avoid this class of errors entirely?
->
-> We are going to answer all three. In order. By building up from scratch — from vanilla JavaScript, to Zone.js, to how Angular actually checks your templates, to what Signals change about the model.
->
-> Let's go."
+> To answer those, we had to understand what Angular is actually doing during change detection."
+> So let's build the mental model from the ground up."
 
 ---
 
