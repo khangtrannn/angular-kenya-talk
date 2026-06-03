@@ -127,11 +127,19 @@ State → synchronization → UI
 ```
 
 > **Speaker note:**
-> "Change detection is simply this: given a piece of state, the UI must reflect it.
+> "At the simplest level, change detection is Angular keeping state and UI in sync.
 >
-> That's the contract. That's the whole job. State changed — make the UI reflect it.
+> When the state changes, the screen should reflect the new value.
 >
-> The question is how and when the framework fulfills that contract. Let's build this from scratch with something very small: a counter."
+> Simple idea.
+>
+> But to make that happen, Angular has to answer two questions.
+>
+> First: when should it check?
+>
+> And second: what should it check?
+>
+> To make that concrete, let's start with the smallest possible example: a counter."
 
 ---
 
@@ -155,15 +163,19 @@ render(); // initial sync
 ```
 
 > **Speaker note:**
-> "Here's our counter. Some state, a span in the DOM, and a render function that connects them.
+> "Here is the same idea in plain JavaScript.
 >
-> Notice this: the DOM has absolutely no idea that state.count exists.
+> We have some state: `count`.
 >
-> The only connection between the two is this render() call.
+> We have some UI: this `span`.
 >
-> If we call it, the UI is synchronized.
+> And then we have a `render()` function that connects them.
 >
-> If we don't call it, the UI is stale."
+> The important thing is: the DOM does not know that `state.count` exists.
+>
+> So changing the state does not automatically update the screen.
+>
+> The only time the UI gets synchronized is when we call `render()`."
 
 ---
 
@@ -189,15 +201,19 @@ fetch('/api/count')
 ```
 
 > **Speaker note:**
-> "Every time state changes, we have to remember to call `render()`.
+> "So now we have a rule.
 >
-> It doesn't matter whether the change comes from a click, a timer, a Promise, or an API response.
+> Whenever state changes, we have to call `render()`.
 >
-> The rule is always the same: state changed, so we must manually synchronize the UI.
+> In one place, that is easy.
 >
-> In a small demo, this is fine. But in a real app.
+> But real apps do not change state from only one place.
 >
-> But in a real app with hundreds of places where state can change — forget it once, and you've got a bug. Data is correct, UI is wrong, and you have no idea why.
+> State can change after a click. After a timer. After a Promise. After an API response.
+>
+> And every time, we have to remember the same thing: call `render()`.
+>
+> If we forget to call `render()`, the screen is out of date.
 >
 > This is the problem every framework has to solve."
 
@@ -236,70 +252,68 @@ XMLHttpRequest(...)
 ```
 
 > **Speaker note:**
-> "So this is exactly the problem Zone.js was built to solve.
+> "This is where Zone.js comes in.
 >
-> Instead of you having to remember to call render() everywhere — what if something just intercepted all those places automatically?
+> Instead of asking us to remember every place where state can change, Zone.js watches the places where work enters the app.
 >
-> That's what Zone.js does. It patches addEventListener, setTimeout, Promise.then, fetch — every place where work enters your app. After each one finishes, it tells Angular: hey, something may have changed.
+> A click handler. A timer. A Promise. An HTTP response.
 >
-> Zone.js doesn't know if count changed. It doesn't know if name changed. It doesn't even know if anything changed at all.
+> When that work finishes, Zone.js notifies Angular.
 >
-> But it answers the first question from our list: **WHEN should Angular update?** Answer: whenever a callback finishes.
+> Not because it knows something changed.
 >
-> The second question — **WHAT changed** — Zone.js cannot answer. And that limitation is exactly where all our problems come from."
+> But because something might have changed.
+>
+> That distinction is important.
+>
+> Zone.js can tell Angular when to check.
+>
+> But it cannot tell Angular what changed.
+>
+> So Angular still has to decide what to check."
 
 **Transition:**
 
-> "So how does Zone.js decide that a callback is finished and Angular should run? That brings us to one important concept: stability — specifically, when the microtask queue becomes empty."
+> "So what happens after Zone.js tells Angular that something might have changed? Angular calls one central method: `ApplicationRef.tick()`."
 
 ---
 
 ## Slide 2.5 — From “Something Happened” to `tick()`
 
 ```text
-A callback finishes
+Work finishes
         ↓
-microtasks are drained
+Angular becomes stable
         ↓
-Zone.js: "Angular, something may have changed"
+Zone.js: "Angular, something might have changed"
         ↓
 ApplicationRef.tick()
-        ↓
-Angular checks the component tree
-```
-
-```typescript
-// Simplified Angular + Zone.js mental model
-this.zone.onMicrotaskEmpty.subscribe(() => {
-  this.applicationRef.tick();
-});
-```
-
-```typescript
-// What tick() means conceptually
-tick() {
-  for (const view of allViews) {
-    detectChanges(view);
-  }
-}
 ```
 
 > **Speaker note:**
-> "Here's how the handoff actually works.
+> "So this is the handoff.
 >
-> Zone.js doesn't call Angular immediately when a button is clicked. It waits. It waits until the microtask queue drains — until all the follow-up work from that callback is done.
+> Some work enters the app: a click, a timer, a Promise, an HTTP response.
 >
-> Then it fires: Angular, something may have changed.
+> That work finishes.
 >
-> Angular responds by calling ApplicationRef.tick().
+> Angular becomes stable.
 >
-> And tick() is Angular saying: I have no idea what changed, so I'm going to walk the entire component tree and check everything.
+> Then Zone.js notifies Angular: something might have changed.
 >
-> We traded manual render() calls for an automatic tick(). That's a real improvement. But tick() is still checking everything, every time — because it has no other choice."
+> Angular responds by calling `ApplicationRef.tick()`.
+>
+> And this is the important tradeoff: we no longer have to call `render()` manually.
+>
+> But Angular still does not know what changed.
+>
+> So `tick()` is Angular's way of saying: okay, let me go check.
+>
+> But check what?"
 
 **Transition:**
 
-> "So now Angular no longer needs us to call `render()` manually. Zone.js tells Angular when to check. But because Zone.js cannot tell Angular what changed, Angular has to inspect the component tree. So next, let's look at what that tree actually looks like."
+> "To answer that, Angular sees the app as a tree of components."
 
 ---
 
@@ -321,6 +335,15 @@ CounterPageComponent
         └── CounterDisplayComponent
 ```
 
+```typescript
+// What tick() means conceptually
+tick() {
+  for (const view of allViews) {
+    detectChanges(view);
+  }
+}
+```
+
 ```text
 Angular checks top-down:
 
@@ -331,49 +354,45 @@ Angular checks top-down:
 ```
 
 > **Speaker note:**
-> "So Zone.js solved the first problem — we no longer have to call render() manually.
+> "To answer that, Angular sees the app as a tree of components.
 >
-> But look at what tick() has to do. It starts at AppComponent at the top and works its way down. Every component. Every child. Top to bottom.
+> The root component at the top. Child components underneath.
 >
-> It does this because it genuinely has no idea what changed. Zone.js told it something happened — that's all the information it has.
+> When `tick()` runs, Angular starts from the root and walks down that tree.
 >
-> So it checks everything.
+> Parent first. Then child components. Top to bottom.
 >
-> And it expects that by the time it finishes, all the values in the tree should be stable. One pass. Done.
+> Because Zone.js does not tell Angular what changed, Angular has to check broadly.
 >
-> That last part — 'should be stable' — is where the error we saw at the beginning comes from."
-
-**Transition:**
-
-> "We know tick() walks the tree. But when Angular arrives at a single component — what does it actually do?"
-
----
+> But now we can ask the more interesting question: when Angular reaches one component, what does it actually check?"
 
 ## Slide 3.2 — How Does Angular Perform Change Detection for a Component?
 
 > **Speaker note:**
-> "Okay so here's the question that unlocks the rest of this section.
+> "When Angular reaches a component, it needs to know two things.
 >
-> We know tick() walks the tree. But when it arrives at one component — what exactly does it do?
+> Which values should it read?
 >
-> How does it know which values to check? How does it know which DOM nodes to update?
+> And where should those values go in the DOM?
 >
-> The answer surprised me when I learned it: Angular doesn't check your class properties at runtime by inspecting them directly.
->
-> It compiled your template — before your app ever ran."
+> The thing that answers both questions is the template function: `templateFn`."
 
 ---
 
 ## Slide 3.3 — Template Functions
 
+```text
+template → templateFn
+```
+
 > **Speaker note:**
-> "Every Angular template is compiled into a JavaScript function — the template function, templateFn.
+> "The key shift is this: Angular does not treat the template as a string at runtime.
 >
-> The template string you write in your @Component decorator? Gone at runtime. Angular replaces it with a generated function full of instructions.
+> It compiles the template into a JavaScript function.
 >
-> When Angular visits your component during change detection, it calls that function.
+> So when Angular checks a component, it calls that generated function.
 >
-> That function IS the change detection for that component. Not a property scan. A function call."
+> That function contains the instructions for reading values and updating the DOM."
 
 ---
 
@@ -436,20 +455,20 @@ function Count_Template(rf, ctx) {
 
 ---
 
-## Slide 3.6 — Creation and Update Phase
+## Slide 3.6 — The Template Function Is Angular's `render()`
 
 > **Speaker note:**
-> "This is the Incremental DOM model — and it's worth comparing to Virtual DOM because they solve the same problem differently.
+> "So the template function has two jobs.
 >
-> Virtual DOM — React's approach — creates a new in-memory representation of the UI, diffs it against the old one, and applies the differences to the real DOM.
+> The creation block runs once. It creates the DOM nodes and stores them in `LView`.
 >
-> Incremental DOM — Angular's approach — the template function IS the DOM operations. There's no virtual tree. No diffing.
+> The update block runs on every change detection pass.
 >
-> rf & 1: Angular runs once, creates the real DOM nodes, stores them in LView. This block never runs again.
+> It reads values from the component instance, compares bindings, and updates the DOM when needed.
 >
-> rf & 2: Angular runs this on every change detection pass. It checks bindings and writes directly to the real DOM.
+> This is Angular's version of the `render()` function from our vanilla JavaScript example.
 >
-> Angular never allocates a parallel in-memory tree. It works on the real DOM, incrementally, guided by the same template function every time."
+> The difference is: we did not write it by hand. Angular generated it from our template."
 
 ---
 
