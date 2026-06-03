@@ -804,47 +804,157 @@ NG0100 is the error you get when something violates that.
 ```text
 Zone.js model:
 
-"Something happened"
+A callback finished
         ↓
-Run tick()
+Something may have changed
         ↓
-Check the tree
+Angular checks broadly
         ↓
-Hope everything is stable
+One pass should be stable
 ```
 
 ```text
 Signal model:
 
-"This exact state changed"
+A signal changed
         ↓
-Mark exact consumers dirty
+Angular knows who consumed it
         ↓
-Refresh what depends on it
+Mark affected views dirty
         ↓
-Synchronize until stable
+Refresh affected views
 ```
 
 > **Speaker note:**
 > "Okay — here's the big picture comparison. And I think once you see this it just clicks.
 >
-> Zone.js tells Angular: something happened. A callback finished. Go check everything.
+> Zone.js gives Angular timing information. A callback finished, so something may have changed.
 >
-> Signals tell Angular: this exact piece of state changed. Here are the consumers that depend on it.
+> But Zone.js cannot tell Angular which state changed, or which view depends on that state. So conceptually, Angular has to check broadly and expect that one pass is stable.
 >
-> With Zone.js, Angular is always guessing. It has to scan the whole tree every time because it has no information about what actually changed.
+> Signals give Angular dependency information. A signal changed, and Angular can know which views consumed that signal.
 >
-> With Signals, Angular knows. The mutation itself carries the information. Angular doesn't need to guess because it was told.
->
-> That's the shift — from 'something happened, go check' to 'this changed, here's what to refresh'."
+> That is the shift: from 'something happened, go check' to 'this state changed, and these are the affected views'."
 
 **Transition:**
 
-> "Let's make that concrete with the same example."
+> "But that raises the real question: how can Angular know which view depends on a signal?"
 
 ---
 
-## Slide 5.2 — The Same Example with Signals
+## Slide 5.2 — Signals Build a Reactive Graph
+
+```typescript
+name = signal('John');
+```
+
+```text
+Template:
+
+{{ name() }}
+```
+
+```text
+Reactive graph:
+
+name
+producer
+"John"
+    ↓
+app-root
+template consumer
+</>
+```
+
+> **Speaker note:**
+> "Here's how Angular gets dependency information.
+>
+> This graph only has two nodes, and that is enough for our example.
+>
+> `name` is a signal producer. The `app-root` template is a reactive consumer.
+>
+> When the template reads `name()`, Angular records the edge: this template consumer depends on this signal producer.
+>
+> So when `name` changes later, Angular does not need to discover that relationship by guessing. The graph already has the answer."
+
+**Transition:**
+
+> "Now the Angular-specific question is: how does a template become a reactive consumer in the first place?"
+
+---
+
+## Slide 5.3 — Templates Run With a Reactive Consumer
+
+```text
+refreshView(lView)
+    ↓
+ReactiveLViewConsumer
+    ↓
+executeTemplate(...)
+    ↓
+template reads name()
+    ↓
+producerAccessed(name)
+    ↓
+edge recorded:
+name → app-root template consumer
+```
+
+> **Speaker note:**
+> "This is the Angular-specific piece.
+>
+> When Angular refreshes a view, it can run the template with a reactive consumer attached to the `LView`.
+>
+> Then Angular executes the template. If the template reads `name()`, the signal system sees that read through `producerAccessed(name)`.
+>
+> Because Angular is currently running the template with a reactive consumer, that read creates the edge from the `name` signal producer to the `app-root` template consumer.
+>
+> This is why a template read is not just a normal function call anymore. It becomes dependency information."
+
+**Transition:**
+
+> "Now we know how the edge is created. What happens when the signal changes?"
+
+---
+
+## Slide 5.4 — Push Dirtiness, Pull Values
+
+```text
+name.set('Doe')
+    ↓
+PUSH:
+  mark app-root template consumer dirty
+    ↓
+Angular refreshes affected view
+    ↓
+PULL:
+  template reads name()
+```
+
+```text
+Signals do not push values into templates.
+
+They push dirtiness.
+
+Templates pull the latest value when refreshed.
+```
+
+> **Speaker note:**
+> "One thing that confused me about Signals at first: when you call `.set()`, Angular does not push the new value directly into the template.
+>
+> What it pushes is dirtiness.
+>
+> `name.set('Doe')` marks the `app-root` template consumer dirty. Then, when Angular refreshes that affected view, the template calls `name()` again and pulls the latest value.
+>
+> So the model is not 'push the value everywhere.' It is: push dirtiness, then pull the value during refresh."
+
+**Transition:**
+
+> "Now we can revisit the exact example from the beginning with the right mental model."
+
+---
+
+## Slide 5.5 — The Same Example with Signals
 
 ```typescript
 @Component({
@@ -860,152 +970,38 @@ export class AppComponent implements AfterViewInit {
 ```
 
 ```text
-name.set('Doe')
-        ↓
-Angular knows this signal changed
-        ↓
-The template that read name() is marked dirty
-        ↓
-Angular schedules that view for refresh
+1. First check
+template reads name()
+name() returns "John"
+LView binding slot = "John"
+edge recorded
+
+2. Hook runs
+name.set("Doe")
+signal value = "Doe"
+LView binding slot = "John"
+consumer marked dirty
+
+3. Refresh
+template reads name()
+name() returns "Doe"
+bindingUpdated("John", "Doe")
+LView binding slot = "Doe"
+DOM updates
 ```
 
 > **Speaker note:**
-> "Same problem. Same component. Same ngAfterViewInit timing.
+> "Now we can bring the original example back.
 >
-> But now name is a signal.
+> Same component. Same `ngAfterViewInit` timing. But now `name` is a signal.
 >
-> It looks like a tiny change — signal(), parentheses in the template, .set() instead of assignment.
+> In the first check, the template reads `name()`, gets 'John', and Angular stores 'John' in the `LView` binding slot. At the same time, the signal read records the edge from `name` to the `app-root` template consumer.
 >
-> But what's actually different is when Angular finds out.
+> Then `ngAfterViewInit` runs. `name.set('Doe')` changes the signal value. The `LView` binding slot is still 'John', but now Angular also knows the template consumer is dirty.
 >
-> With a class property, Angular discovers the change later — during the next check, when it's already too late.
+> So Angular can refresh the affected view. The template reads `name()` again, gets 'Doe', `bindingUpdated` compares old 'John' with new 'Doe', updates the `LView` slot, and writes the DOM.
 >
-> With a signal, Angular is notified at the moment name.set('Doe') runs. The template that read name() is marked dirty right then. Angular schedules a refresh.
->
-> It doesn't need to guess. It was told."
-
-**Transition:**
-
-> "That is possible because Signals build a reactive graph."
-
----
-
-## Slide 5.3 — Signals Build a Reactive Graph
-
-```typescript
-const count = signal(0);
-const message = computed(() => `Count: ${count()}`);
-```
-
-```text
-count signal
-    ↓
-message computed
-    ↓
-template
-```
-
-```html
-<h1>{{ message() }}</h1>
-```
-
-> **Speaker note:**
-> "Here's how Angular knows which consumers to notify.
->
-> When you read a signal inside a computed or a template, Angular records that dependency. It builds a graph automatically.
->
-> The template reads message() — so the template is a consumer of message. message reads count() — so message is a consumer of count. The graph is: count → message → template.
->
-> Now when count changes, Angular doesn't need to scan anything to find out who cares. The graph already has the answer.
->
-> This is fundamentally different from Zone.js, which has no graph at all — just a notification that something, somewhere, may have changed."
-
-**Transition:**
-
-> "But Signals do not immediately push new values everywhere. The mechanism is more careful than that."
-
----
-
-## Slide 5.4 — Push, Poll, Pull
-
-```text
-count.set(1)
-    ↓
-PUSH:
-  mark consumers dirty
-
-Before recomputing:
-    ↓
-POLL:
-  did the producer version change?
-
-If yes:
-    ↓
-PULL:
-  recompute the value
-```
-
-```text
-Signals do not push values.
-
-They push dirtiness.
-Consumers pull the value when needed.
-```
-
-> **Speaker note:**
-> "One thing that confused me about Signals at first: when you call .set(), Angular doesn't immediately push the new value everywhere through the graph.
->
-> What it pushes is dirtiness. Just a flag: you might be stale.
->
-> Then later, before a consumer actually needs to recompute, it checks — did my producer's version number change? That's the poll step.
->
-> If yes: pull the new value and recompute.
->
-> This keeps Signals both precise and efficient. Angular knows the affected path, but it still avoids recomputing anything that doesn't actually need it."
-
-**Transition:**
-
-> "Now let's connect this back to templates."
-
----
-
-## Slide 5.5 — Templates Become Reactive Consumers
-
-```text
-name = signal('John')
-
-Template:
-{{ name() }}
-
-Reactive relationship:
-
-name signal
-    ↓
-component template
-```
-
-```text
-When name.set('Doe') runs:
-
-name signal changes
-    ↓
-template is marked dirty
-    ↓
-this view gets refreshed
-```
-
-> **Speaker note:**
-> "And here's the Angular-specific piece of this.
->
-> A template is a reactive consumer — just like a computed.
->
-> When the template reads name(), Angular records: this view depends on name.
->
-> When name.set('Doe') runs, Angular marks that specific view dirty.
->
-> Not the whole tree. Not everything that Zone.js would've triggered.
->
-> Just the exact view that consumed that exact signal."
+> Signals do not remove `LView` or `bindingUpdated`. The difference is that the mutation is visible to Angular when it happens, so Angular can synchronize the affected view instead of only discovering a changed binding too late."
 
 **Transition:**
 
