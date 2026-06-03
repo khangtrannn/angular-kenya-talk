@@ -30,6 +30,89 @@ Signals:
 
 ---
 
+# SECTION 1 — The Hook
+
+**Target time: 3–4 min**
+
+---
+
+## Slide 1.1 — Introduction
+
+> **Speaker note:**
+> [Brief self-introduction — name, author of @ng-brutalism/ui, current work.]
+>
+> "So, what I want to do today is kind of take you guys along on some of the things I've learned about Angular Change Detection and Signals.
+>
+> And I am not an expert in any of this, so this is going to be me taking you along on my learning journey and nothing more.
+>
+> So how did I end up being here talking to you guys about Angular Change Detection today?"
+
+---
+
+## Slide 1.2 — The Error Message
+
+> **Speaker note:**
+> "It started with this error.
+>
+> `NG0100: ExpressionChangedAfterItHasBeenCheckedError`.
+>
+> Expression has changed after it was checked. Previous value: 'John'. Current value: 'Doe'.
+>
+> I was working on an Angular app and this thing just showed up in my console. I had no idea what it meant. The values looked fine. The data was correct. But Angular was throwing at me anyway."
+
+---
+
+## Slide 1.3 — Stack Overflow
+
+> **Speaker note:**
+> "Back then, there was no AI or LLM. So I did what every developer does — I went to our old friend Stack Overflow.
+>
+> And I found a solution very quickly. Wrap the mutation in a `setTimeout`. And it worked.
+>
+> The error was gone. The UI updated correctly. Everything looked fine.
+>
+> But I had two questions that I couldn't shake.
+>
+> First — *why* does this work? What is `setTimeout` actually doing here that makes Angular happy?
+>
+> And second — why does everyone in the comments say 'yes this fixes it, but don't do this, it's a bad practice'?
+>
+> I used it anyway, because I had a deadline. But those two questions stayed with me."
+
+---
+
+## Slide 1.4 — Angular RFC
+
+> **Speaker note:**
+> "A while later, I came across this Angular RFC.
+>
+> 'Better guardrails to avoid common pitfalls that lead to poor change detection performance and avoid common pain points such as ExpressionChangedAfterItHasBeenChecked errors.'
+>
+> The Angular team was working on something specifically to address this class of problems.
+>
+> That told me this wasn't just me struggling. This was a real pain point, at the framework level.
+>
+> And it made me want to actually understand what was going on — not just patch it with `setTimeout` and move on."
+
+---
+
+## Slide 1.5 — Three Important Questions
+
+> **Speaker note:**
+> "So today, the whole talk is built around three questions.
+>
+> One: why is `setTimeout` a bad practice — even when it works?
+>
+> Two: why does Angular throw `ExpressionChangedAfterItHasBeenCheckedError` in the first place?
+>
+> Three: why can Signals help us avoid this class of errors entirely?
+>
+> We are going to answer all three. In order. By building up from scratch — from vanilla JavaScript, to Zone.js, to how Angular actually checks your templates, to what Signals change about the model.
+>
+> Let's go."
+
+---
+
 # SECTION 2 — Change Detection 101
 
 **Target time: 14 min**
@@ -42,10 +125,10 @@ Signals:
 State → synchronization → UI
 ```
 
-> **Speaker note:**  
+> **Speaker note:**
 > "Change detection is simply this: given a piece of state, the UI must reflect it.
 >
-> That's the contract.
+> That's the contract. That's the whole job. State changed — make the UI reflect it.
 >
 > The question is how and when the framework fulfills that contract. Let's build this from scratch with something very small: a counter."
 
@@ -70,12 +153,12 @@ render(); // initial sync
 <span id="counter"></span>
 ```
 
-> **Speaker note:**  
-> "Let's start with the simplest possible UI: a counter. We have some state, and we have the DOM.
+> **Speaker note:**
+> "Here's our counter. Some state, a span in the DOM, and a render function that connects them.
 >
-> But notice something important: the DOM does not know that `state.count` exists.
+> Notice this: the DOM has absolutely no idea that state.count exists.
 >
-> The only thing that connects state to the UI is this `render()` function.
+> The only connection between the two is this render() call.
 >
 > If we call it, the UI is synchronized.
 >
@@ -104,18 +187,18 @@ fetch('/api/count')
   });
 ```
 
-> **Speaker note:**  
+> **Speaker note:**
 > "Every time state changes, we have to remember to call `render()`.
 >
 > It doesn't matter whether the change comes from a click, a timer, a Promise, or an API response.
 >
 > The rule is always the same: state changed, so we must manually synchronize the UI.
 >
-> In a small demo, this is fine. But in a real app, state can change from hundreds of places.
+> In a small demo, this is fine. But in a real app.
 >
-> Forget `render()` once, and your state is correct but your UI is wrong.
+> But in a real app with hundreds of places where state can change — forget it once, and you've got a bug. Data is correct, UI is wrong, and you have no idea why.
 >
-> This is the problem frameworks try to solve."
+> This is the problem every framework has to solve."
 
 **Transition:**
 
@@ -151,22 +234,18 @@ fetch(...).then(...)
 XMLHttpRequest(...)
 ```
 
-> **Speaker note:**  
-> "In vanilla JavaScript, we had to remember to call `render()` every time state changed.
+> **Speaker note:**
+> "So this is exactly the problem Zone.js was built to solve.
 >
-> Zone.js says: what if developers don't have to remember?
+> Instead of you having to remember to call render() everywhere — what if something just intercepted all those places automatically?
 >
-> What if we intercept the places where work enters the app — clicks, timers, promises, HTTP responses — and after that work finishes, we tell Angular: something may have changed.
+> That's what Zone.js does. It patches addEventListener, setTimeout, Promise.then, fetch — every place where work enters your app. After each one finishes, it tells Angular: hey, something may have changed.
 >
-> That is the key idea.
+> Zone.js doesn't know if count changed. It doesn't know if name changed. It doesn't even know if anything changed at all.
 >
-> Zone.js does not know that `count` changed. It does not know which component changed. It only knows that some callback finished.
+> But it answers the first question from our list: **WHEN should Angular update?** Answer: whenever a callback finishes.
 >
-> So Zone.js answers the first big question: **WHEN should Angular update?**
->
-> But it cannot answer the second question: **WHAT exactly changed?**
->
-> And because Angular doesn't know what changed, the safest thing it can do is check everything."
+> The second question — **WHAT changed** — Zone.js cannot answer. And that limitation is exactly where all our problems come from."
 
 **Transition:**
 
@@ -204,20 +283,18 @@ tick() {
 }
 ```
 
-> **Speaker note:**  
-> "Now we can connect the dots.
+> **Speaker note:**
+> "Here's how the handoff actually works.
 >
-> Zone.js does not directly update the UI. It only tells Angular: a callback finished, the microtask queue is empty, something may have changed.
+> Zone.js doesn't call Angular immediately when a button is clicked. It waits. It waits until the microtask queue drains — until all the follow-up work from that callback is done.
 >
-> Angular responds by calling `ApplicationRef.tick()`.
+> Then it fires: Angular, something may have changed.
 >
-> And `tick()` is basically Angular saying: I don't know what changed, so I need to walk the component tree and check the views.
+> Angular responds by calling ApplicationRef.tick().
 >
-> This is the important tradeoff.
+> And tick() is Angular saying: I have no idea what changed, so I'm going to walk the entire component tree and check everything.
 >
-> Zone.js removes the need for us to manually call `render()`, but it still cannot tell Angular what changed.
->
-> It only tells Angular when it is a good time to check."
+> We traded manual render() calls for an automatic tick(). That's a real improvement. But tick() is still checking everything, every time — because it has no other choice."
 
 **Transition:**
 
@@ -252,28 +329,156 @@ Angular checks top-down:
 4. Old value is compared with new value
 ```
 
-> **Speaker note:**  
-> "So now Angular no longer needs us to call `render()` manually. Zone.js tells Angular when something may have changed, and Angular responds by running `tick()`.
+> **Speaker note:**
+> "So Zone.js solved the first problem — we no longer have to call render() manually.
 >
-> But what does `tick()` actually do?
+> But look at what tick() has to do. It starts at AppComponent at the top and works its way down. Every component. Every child. Top to bottom.
 >
-> It walks the component tree from the root. Parent first, then child components. And inside each component, Angular re-evaluates the template bindings.
+> It does this because it genuinely has no idea what changed. Zone.js told it something happened — that's all the information it has.
 >
-> This top-down order is important.
+> So it checks everything.
 >
-> Angular's original change detection model assumes that during one pass, values should become stable as Angular moves through the tree.
+> And it expects that by the time it finishes, all the values in the tree should be stable. One pass. Done.
 >
-> If something changes after Angular already checked it, Angular has a problem.
->
-> And that problem is exactly the error we saw at the beginning."
+> That last part — 'should be stable' — is where the error we saw at the beginning comes from."
 
 **Transition:**
 
-> "To understand that error, we need one more piece: Angular does not just render values. It remembers what it rendered last time."
+> "We know tick() walks the tree. But when Angular arrives at a single component — what does it actually do?"
 
 ---
 
-## Slide 3.2 — Every Binding Has Memory
+## Slide 3.2 — How Does Angular Perform Change Detection for a Component?
+
+> **Speaker note:**
+> "Okay so here's the question that unlocks the rest of this section.
+>
+> We know tick() walks the tree. But when it arrives at one component — what exactly does it do?
+>
+> How does it know which values to check? How does it know which DOM nodes to update?
+>
+> The answer surprised me when I learned it: Angular doesn't check your class properties at runtime by inspecting them directly.
+>
+> It compiled your template — before your app ever ran."
+
+---
+
+## Slide 3.3 — Template Functions
+
+> **Speaker note:**
+> "Every Angular template is compiled into a JavaScript function — the template function, templateFn.
+>
+> The template string you write in your @Component decorator? Gone at runtime. Angular replaces it with a generated function full of instructions.
+>
+> When Angular visits your component during change detection, it calls that function.
+>
+> That function IS the change detection for that component. Not a property scan. A function call."
+
+---
+
+## Slide 3.4 — Template Compiler
+
+```typescript
+// Input
+@Component({
+  template: `<h1>{{ count }}</h1>`
+})
+export class Count {
+  count = 0;
+}
+```
+
+```typescript
+// Compiled output
+function Count_Template(rf, ctx) {
+  if (rf & 1) {
+    ɵɵelementStart(0, 'h1');
+    ɵɵtext(1);
+    ɵɵelementEnd();
+  }
+  if (rf & 2) {
+    ɵɵadvance(1);
+    ɵɵtextInterpolate(ctx.count);
+  }
+}
+```
+
+> **Speaker note:**
+> "So here's what the compiler actually outputs for `<h1>{{ count }}</h1>`.
+>
+> Two arguments: rf is the render flags, ctx is your component instance.
+>
+> rf is a bitmask. rf & 1 — creation phase. rf & 2 — update phase.
+>
+> Creation phase: Angular builds the real DOM. ɵɵelementStart creates the h1 at slot 0. ɵɵtext creates the text node at slot 1. ɵɵelementEnd closes it.
+>
+> Update phase: ɵɵadvance(1) moves the internal pointer to slot 1 — the text node. Then ɵɵtextInterpolate evaluates ctx.count and handles the DOM update.
+>
+> Creation runs once — ever. Update runs on every single change detection pass."
+
+---
+
+## Slide 3.5 — LView: Angular's Internal View
+
+> **Speaker note:**
+> "Before we trace what happens in the update phase, I need to introduce one data structure: LView.
+>
+> Every component has one. LView is a flat array — Angular's internal storage for a view.
+>
+> It stores everything that view needs: the real DOM nodes, the component instance, and the previous binding values.
+>
+> One component. One LView.
+>
+> Remember when I said 'every binding has memory'? That memory is in LView. Slot 0 is the h1 node. Slot 1 is the text node. And further along in the array, Angular keeps the last value it saw for each binding.
+>
+> That's where the comparison lives."
+
+---
+
+## Slide 3.6 — Creation and Update Phase
+
+> **Speaker note:**
+> "This is the Incremental DOM model — and it's worth comparing to Virtual DOM because they solve the same problem differently.
+>
+> Virtual DOM — React's approach — creates a new in-memory representation of the UI, diffs it against the old one, and applies the differences to the real DOM.
+>
+> Incremental DOM — Angular's approach — the template function IS the DOM operations. There's no virtual tree. No diffing.
+>
+> rf & 1: Angular runs once, creates the real DOM nodes, stores them in LView. This block never runs again.
+>
+> rf & 2: Angular runs this on every change detection pass. It checks bindings and writes directly to the real DOM.
+>
+> Angular never allocates a parallel in-memory tree. It works on the real DOM, incrementally, guided by the same template function every time."
+
+---
+
+## Slide 3.7 — How a Binding Update Reaches the DOM
+
+> **Speaker note:**
+> "Let's trace the whole chain — from ɵɵtextInterpolate all the way down to the actual DOM write.
+>
+> ɵɵtextInterpolate(ctx.count)
+>   → ɵɵtextInterpolate1('', ctx.count, '')
+>   → interpolation1(lView, '', ctx.count, '')       ← bindingUpdated is called here
+>   → textBindingInternal(lView, getSelectedIndex(), interpolated)
+>   → getNativeByIndex(index, lView)                 ← gets the real text node from LView
+>   → updateTextNode(lView[RENDERER], textNode, value)
+>   → renderer.setValue(textNode, value)
+>   → node.nodeValue = value                         ← the real browser DOM write
+>
+> This is where the DOM actually changes. Not in a virtual tree. Right here.
+>
+> And the important moment is interpolation1 — that's where bindingUpdated runs. It reads the previous value from LView, compares it to the new value. Equal? The whole rest of the chain is skipped entirely. No DOM write at all.
+>
+> The comparison isn't just an optimization — it's the gate. Everything below it only happens if the value actually changed."
+
+**Transition:**
+
+> "So every binding in the template has a slot in LView for its previous value. Let's look at that more directly."
+
+---
+
+## Slide 3.8 — Every Binding Has Memory
 
 ```typescript
 @Component({
@@ -303,18 +508,18 @@ yes → skip DOM update
 no  → update DOM and store new value
 ```
 
-> **Speaker note:**  
-> "When Angular sees a binding like `{{ count }}`, it doesn't blindly update the DOM every time.
+> **Speaker note:**
+> "Here's something that surprised me when I first learned this — Angular doesn't just re-render everything on every check.
 >
-> It stores the previous value internally.
+> It remembers.
 >
-> Then on the next change detection pass, it evaluates the binding again and compares the new value with the previous value.
+> Every binding has a slot in LView where Angular stores the last value it saw. So when it evaluates `{{ count }}` again, it's not just reading the value — it's comparing. Did this produce something different from last time?
 >
-> If the value is the same, Angular skips the DOM update.
+> Same value? Skip the DOM update entirely.
 >
-> If the value changed, Angular updates the DOM and stores the new value.
+> Different value? Update the DOM and store the new value.
 >
-> So change detection is basically Angular asking this question over and over: did this binding produce a different value than last time?"
+> That's the whole loop. That's what change detection actually is — Angular asking that question for every binding, every pass."
 
 **Transition:**
 
@@ -322,7 +527,7 @@ no  → update DOM and store new value
 
 ---
 
-## Slide 3.3 — The Binding Check
+## Slide 3.9 — The Binding Check
 
 ```typescript
 function bindingUpdated(lView, bindingIndex, newValue) {
@@ -344,20 +549,14 @@ lView = Angular's internal storage for this view
 bindingIndex = where this binding's previous value is stored
 ```
 
-> **Speaker note:**  
-> "This is simplified, but it gives us the right mental model.
+> **Speaker note:**
+> "Simplified, but this is the actual mechanism.
 >
-> Angular stores binding values inside an internal structure called `LView`.
+> oldValue comes out of LView at the binding's slot. If newValue is different — write the new value back to LView, update the DOM, return true. Same value — do nothing, return false.
 >
-> Each binding has a slot.
+> That's it. That runs for every binding, every pass.
 >
-> During change detection, Angular calculates the new value and compares it with the old value in that slot.
->
-> If the value changed, Angular updates the DOM and writes the new value into `LView`.
->
-> This explains the normal case.
->
-> But in development mode, Angular does one extra thing."
+> Now — in dev mode — Angular runs this twice. And that second run is exactly where NG0100 comes from."
 
 **Transition:**
 
@@ -390,20 +589,20 @@ checkNoChanges:
    If anything changed now, throw NG0100."
 ```
 
-> **Speaker note:**  
-> "In development mode, Angular runs a second check after the normal change detection pass.
+> **Speaker note:**
+> "In dev mode, Angular doesn't just run detectChanges once.
 >
-> The first pass is allowed to update the DOM.
+> It runs a second pass right after — checkNoChanges.
 >
-> The second pass is not.
+> The first pass is allowed to update the DOM. That's normal.
 >
-> The second pass asks: if I run the template again immediately, do I get the same values?
+> The second pass is not allowed to find anything new. It just asks: if I re-evaluate all the bindings right now, do I still get the same values I just stored?
 >
-> If the answer is no, Angular throws `ExpressionChangedAfterItHasBeenCheckedError`.
+> Yes — great, everything is stable.
 >
-> So NG0100 is not random.
+> No — something changed after Angular already checked it. NG0100.
 >
-> It means Angular checked a value, then something changed that value before the current change detection cycle finished."
+> This isn't random. It's Angular catching a very specific violation. Let's go back to the code and see exactly what triggers it."
 
 **Transition:**
 
@@ -434,18 +633,14 @@ Template:
 {{ name }}
 ```
 
-> **Speaker note:**  
-> "At first glance, this code looks harmless.
+> **Speaker note:**
+> "Okay — this is the code that sent me to Stack Overflow.
 >
-> We start with `name = 'John`.
+> I remember looking at it thinking: what is wrong here? The data is fine. The value ends up as 'Doe'. Nothing looks broken.
 >
-> Then in `ngAfterViewInit`, we change it to `Doe`.
+> But Angular was furious.
 >
-> The value is valid. The UI should eventually show `Doe`.
->
-> So why does Angular throw?
->
-> The answer is not the value. The answer is timing."
+> The value is not the problem. The timing is."
 
 **Transition:**
 
@@ -477,20 +672,20 @@ Angular expected "John"
 NG0100 ❌
 ```
 
-> **Speaker note:**  
-> "Angular starts checking the component.
+> **Speaker note:**
+> "Walk through this with me.
 >
-> The template reads `name`, gets `John`, and Angular stores `John` as the checked value.
+> Angular starts the change detection pass. It checks the template. `{{ name }}` evaluates to 'John'. Angular stores 'John' in LView.
 >
-> Then `ngAfterViewInit` runs and changes `name` to `Doe`.
+> Then ngAfterViewInit runs — after the view has been checked, that's literally when that lifecycle hook fires.
 >
-> Now development mode runs `checkNoChanges`.
+> name gets set to 'Doe'.
 >
-> Angular evaluates the same binding again. But now the value is `Doe`.
+> Now dev mode runs checkNoChanges. It evaluates `{{ name }}` again. Gets 'Doe'. But Angular stored 'John'.
 >
-> From Angular's point of view, this means the value changed after it was already checked.
+> Angular says: this binding changed after I already checked it.
 >
-> That is why the error name is so literal: `ExpressionChangedAfterItHasBeenCheckedError`."
+> That is NG0100. The error name isn't cryptic at all once you understand the model — it's completely literal."
 
 **Transition:**
 
@@ -532,22 +727,20 @@ Angular runs another tick()
 UI updates
 ```
 
-> **Speaker note:**  
-> "`setTimeout` does not fix the model.
+> **Speaker note:**
+> "And now — finally — I can explain why setTimeout appears to work. Because when I found this fix on Stack Overflow, I used it, the error went away, and I had no idea why.
 >
-> It just moves the mutation to later.
+> Here's why.
 >
-> During the current change detection cycle, `name` stays as `John`, so `checkNoChanges` passes.
+> You're not fixing anything. You're just moving the mutation out of the current change detection cycle entirely.
 >
-> Then the timeout callback runs in a separate task.
+> During this cycle: name stays 'John'. checkNoChanges runs. No change. No error.
 >
-> Zone.js sees that task finish and tells Angular: something may have changed.
+> Later — in a completely separate browser task — the timeout fires. name becomes 'Doe'. Zone.js sees that task finish, tells Angular something changed, Angular runs another tick(), and the UI updates.
 >
-> Angular runs another `tick()`, walks the tree again, and updates the UI to `Doe`.
+> So yes, it works. But only because you escaped the check, not because you fixed the underlying problem.
 >
-> So yes, it works.
->
-> But it works by escaping the current check, not by making the mutation meaningful to Angular."
+> That's why everyone in those Stack Overflow comments says 'don't do this'. You're working around Angular's model, not with it."
 
 **Transition:**
 
@@ -555,7 +748,7 @@ UI updates
 
 ---
 
-## Slide 4.5 — The Real Lesson
+## Slide 4.5 — Unidirectional Data Flow
 
 ```text
 The problem is not:
@@ -568,29 +761,35 @@ The problem is:
 ```
 
 ```text
-Old Angular mental model:
+Unidirectional Data Flow:
 
-One pass should be stable.
-If a checked value changes too late,
-Angular throws.
+Angular walks the tree top-down, one pass, one direction.
+Once a value has been checked,
+it must not change again in the same pass.
+
+NG0100 is the error you get when something violates that.
 ```
 
-> **Speaker note:**  
-> "The important lesson is this: Angular is not angry because the value changed.
+> **Speaker note:**
+> "Now we can answer the third question we asked at the beginning.
 >
-> Angular is angry because the value changed too late.
+> Why does Angular throw ExpressionChangedAfterItHasBeenCheckedError?
 >
-> In the old model, one change detection pass is expected to be stable.
+> This is the answer: **Unidirectional Data Flow**.
 >
-> Angular walks from top to bottom.
+> Angular walks the component tree top-down, in one direction. Parent first, then children.
 >
-> Once a value has been checked, it should not change again inside the same pass.
+> It expects that one pass should be stable. If a value was already checked and something mutates it afterward — in the same pass — Angular has no way to honor that without walking the tree again.
 >
-> That is the rule NG0100 protects."
+> In the old model, it doesn't. It throws instead.
+>
+> Angular is not angry because the value changed. Angular is angry because the value changed in the wrong direction — after the check had already moved past it.
+>
+> That is the rule NG0100 protects. And now you know its real name."
 
 **Transition:**
 
-> "And this brings us back to the bigger limitation. Zone.js can tell Angular when to check. But it cannot tell Angular what changed, or that this mutation should be part of a new synchronization step. For that, Angular needs a different model."
+> "Zone.js can tell Angular when to check. But it cannot tell Angular what changed, or that this mutation should be part of a new synchronization step. For that, Angular needs a different model."
 
 ---
 
@@ -626,22 +825,18 @@ Refresh what depends on it
 Synchronize until stable
 ```
 
-> **Speaker note:**  
-> "This is the key shift.
+> **Speaker note:**
+> "Okay — here's the big picture comparison. And I think once you see this it just clicks.
 >
-> Zone.js only knows that something happened.
+> Zone.js tells Angular: something happened. A callback finished. Go check everything.
 >
-> A click finished. A timeout finished. A promise resolved.
+> Signals tell Angular: this exact piece of state changed. Here are the consumers that depend on it.
 >
-> But Zone.js does not know whether `name`, `count`, `user`, or nothing changed.
+> With Zone.js, Angular is always guessing. It has to scan the whole tree every time because it has no information about what actually changed.
 >
-> Signals are different.
+> With Signals, Angular knows. The mutation itself carries the information. Angular doesn't need to guess because it was told.
 >
-> A signal is not just a value. It is a value Angular can track.
->
-> When a signal changes, Angular knows which consumers depend on it.
->
-> That means Angular finally has information about `WHAT` changed, not just `WHEN` something happened."
+> That's the shift — from 'something happened, go check' to 'this changed, here's what to refresh'."
 
 **Transition:**
 
@@ -674,18 +869,20 @@ The template that read name() is marked dirty
 Angular schedules that view for refresh
 ```
 
-> **Speaker note:**  
-> "This looks like a tiny change: `signal()`, parentheses in the template, and `.set()`.
+> **Speaker note:**
+> "Same problem. Same component. Same ngAfterViewInit timing.
 >
-> But architecturally, this is huge.
+> But now name is a signal.
 >
-> With a normal class property, Angular only discovers the change later by checking.
+> It looks like a tiny change — signal(), parentheses in the template, .set() instead of assignment.
 >
-> With a signal, Angular is notified at the moment the value changes.
+> But what's actually different is when Angular finds out.
 >
-> So when `name.set('Doe')` runs, Angular does not need to guess.
+> With a class property, Angular discovers the change later — during the next check, when it's already too late.
 >
-> It knows this signal changed, and it knows the template that read this signal must be refreshed."
+> With a signal, Angular is notified at the moment name.set('Doe') runs. The template that read name() is marked dirty right then. Angular schedules a refresh.
+>
+> It doesn't need to guess. It was told."
 
 **Transition:**
 
@@ -712,20 +909,16 @@ template
 <h1>{{ message() }}</h1>
 ```
 
-> **Speaker note:**  
-> "When Angular renders the template, it tracks signal reads.
+> **Speaker note:**
+> "Here's how Angular knows which consumers to notify.
 >
-> If the template reads `message()`, the template becomes a consumer of `message`.
+> When you read a signal inside a computed or a template, Angular records that dependency. It builds a graph automatically.
 >
-> If `message` reads `count()`, then `message` becomes a consumer of `count`.
+> The template reads message() — so the template is a consumer of message. message reads count() — so message is a consumer of count. The graph is: count → message → template.
 >
-> So Angular builds a graph:
+> Now when count changes, Angular doesn't need to scan anything to find out who cares. The graph already has the answer.
 >
-> `count` affects `message`, and `message` affects the template.
->
-> Now when `count` changes, Angular does not need to scan the whole world to discover who cares.
->
-> The graph already tells Angular who may be affected."
+> This is fundamentally different from Zone.js, which has no graph at all — just a notification that something, somewhere, may have changed."
 
 **Transition:**
 
@@ -759,18 +952,16 @@ They push dirtiness.
 Consumers pull the value when needed.
 ```
 
-> **Speaker note:**  
-> "When you call `.set()`, Angular does not push the new value through the whole graph immediately.
+> **Speaker note:**
+> "One thing that confused me about Signals at first: when you call .set(), Angular doesn't immediately push the new value everywhere through the graph.
 >
-> It pushes a dirtiness notification: this consumer may be stale.
+> What it pushes is dirtiness. Just a flag: you might be stale.
 >
-> Later, before recomputing, the consumer checks the producer's version.
+> Then later, before a consumer actually needs to recompute, it checks — did my producer's version number change? That's the poll step.
 >
-> If the version changed, it pulls the new value and recomputes.
+> If yes: pull the new value and recompute.
 >
-> This is why Signals are precise and efficient.
->
-> Angular knows the affected path, but it still avoids unnecessary recomputation."
+> This keeps Signals both precise and efficient. Angular knows the affected path, but it still avoids recomputing anything that doesn't actually need it."
 
 **Transition:**
 
@@ -803,18 +994,18 @@ template is marked dirty
 this view gets refreshed
 ```
 
-> **Speaker note:**  
-> "The important Angular-specific piece is this: templates can act as reactive consumers.
+> **Speaker note:**
+> "And here's the Angular-specific piece of this.
 >
-> When a template reads `name()`, Angular remembers that this view depends on that signal.
+> A template is a reactive consumer — just like a computed.
 >
-> Later, when `name.set('Doe')` runs, Angular marks that view dirty.
+> When the template reads name(), Angular records: this view depends on name.
 >
-> Not every view.
+> When name.set('Doe') runs, Angular marks that specific view dirty.
 >
-> Not the whole tree because a callback finished.
+> Not the whole tree. Not everything that Zone.js would've triggered.
 >
-> The specific view that consumed the signal."
+> Just the exact view that consumed that exact signal."
 
 **Transition:**
 
@@ -860,24 +1051,16 @@ while (dirty) {
 }
 ```
 
-> **Speaker note:**  
-> "This is the big architectural shift.
+> **Speaker note:**
+> "And this is the answer to everything we've been building toward.
 >
-> Old Angular expected a single pass to be stable.
+> Old model: Angular runs one pass, expects it to be stable, and throws NG0100 if anything changes too late.
 >
-> If something changed too late, development mode caught it and threw NG0100.
+> Signal model: if a signal changes during synchronization, Angular can honor it. It marks the affected view dirty and loops until everything stabilizes.
 >
-> With Signals, Angular can do something better.
+> Angular still has safety limits — it won't loop forever. But late mutations via signals aren't violations anymore. Angular knows about them. It can incorporate them.
 >
-> If a signal changes during synchronization, Angular can honor that change.
->
-> It marks the affected view dirty and loops until the UI becomes stable.
->
-> This does not mean infinite loops are okay. Angular still has safety limits.
->
-> But it does mean Angular no longer has to treat every late mutation as a broken unidirectional flow.
->
-> If the mutation is a signal mutation, Angular can synchronize it."
+> The model went from 'one pass, hope for the best' to 'synchronize until stable'."
 
 **Transition:**
 
@@ -885,64 +1068,39 @@ while (dirty) {
 
 ---
 
-## Slide 5.7 — NG0100 Revisited with Signals
+## Slide 5.7 — Signals Change the Timing Story
 
-```typescript
-// Before
-@Component({
-  template: `<h1>{{ name }}</h1>`
-})
-export class AppComponent implements AfterViewInit {
-  name = 'John';
-
-  ngAfterViewInit() {
-    this.name = 'Doe'; // ❌ NG0100
-  }
-}
-```
-
-```typescript
-// After
-@Component({
-  template: `<h1>{{ name() }}</h1>`
-})
-export class AppComponent implements AfterViewInit {
-  name = signal('John');
-
-  ngAfterViewInit() {
-    this.name.set('Doe'); // ✅ synchronized
-  }
-}
-```
-
-```text
-What changes?
-
-Class property:
-  Angular discovers the change too late
-
-Signal:
-  Angular is notified when the change happens
-```
-
-> **Speaker note:**  
-> "Now the difference is clear.
+> **Speaker note:**
+> "Let's bring this back to where we started.
 >
-> In the class property version, Angular has no notification.
+> On the left: the class property version. Angular checks `name`, gets 'John', stores it. Then `ngAfterViewInit` runs and mutates `name` to 'Doe'. Angular discovers the change too late — after the check has already moved past it. NG0100.
 >
-> It checked `John`, then later discovered `Doe`, and dev mode threw NG0100.
+> On the right: the signal version. `name.set('Doe')` runs. Angular is notified at that exact moment. The view is marked dirty. Angular synchronizes it before finishing the pass.
 >
-> In the signal version, `name.set('Doe')` marks the view dirty.
+> The bottom line on the slide says it: signals make updates explicit. Angular doesn't have to discover the change by checking. It is told about the change when it happens.
 >
-> Angular sees that the view needs another refresh and synchronizes it before finishing.
+> With a class property, Angular is always guessing — scanning the tree, hoping nothing changed too late.
 >
-> NG0100 is not suppressed.
+> With a signal, Angular knows. It knows what changed, which view consumed it, and when to refresh it.
 >
-> Angular simply has nothing to complain about because the state and UI are synchronized."
+> That is the shift from change detection to synchronization."
 
-**Transition to Section 6:**
+**Transition to Q&A:**
 
-> "And once Angular knows exactly what changed and which view consumed it, this unlocks something much bigger than fixing NG0100: targeted change detection."
+> "And that's the whole story — from a vanilla JavaScript counter that needed a manual render(), through Zone.js telling Angular when to check, through LView and templateFn and bindingUpdated, through NG0100 and unidirectional data flow, all the way to Signals giving Angular the information it was always missing."
+
+---
+
+## Slide 5.8 — Thank You
+
+> **Speaker note:**
+> "Thank you.
+>
+> I hope this was useful — not just as a list of Angular facts, but as a way to build the mental model from the ground up.
+>
+> If you take one thing away: Zone.js solved the 'when' problem. Signals solve the 'what' problem. And once Angular knows what changed, it can synchronize instead of guess.
+>
+> I'm Khang — author of @ng-brutalism/ui — build loud, stay sharp. Happy to take any questions."
 
 ---
 
@@ -962,7 +1120,7 @@ ngAfterViewInit() {
 }
 ```
 
-> **Speaker note:**  
+> **Speaker note:**
 > "This example is useful, but I would keep it as an optional demo or Q&A slide.
 >
 > It reinforces the same lesson: NG0100 is about when a mutation happens relative to Angular's checking pass.

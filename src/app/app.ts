@@ -25,12 +25,6 @@ const SWIPE_THRESHOLD_PX = 50;
   imports: [RouterOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div
-      class="progress"
-      [style.transform]="'scaleX(' + progress() + ')'"
-      aria-hidden="true"
-    ></div>
-
     <router-outlet />
 
     <button
@@ -57,15 +51,6 @@ const SWIPE_THRESHOLD_PX = 50;
         height: 100dvh;
         overflow: hidden;
         background: #f9eeda;
-      }
-      .progress {
-        position: fixed;
-        inset: 0 0 auto 0;
-        height: 2px;
-        background: #f6c945;
-        transform-origin: 0 50%;
-        transition: transform 250ms ease;
-        z-index: 10;
       }
       .zone {
         position: fixed;
@@ -122,11 +107,6 @@ export class App {
 
   private readonly slug = computed(() => this.url().split('?')[0].split('#')[0].replace(/^\//, ''));
   private readonly index = computed(() => findSlideIndex(this.slug()));
-
-  readonly progress = computed(() => {
-    const i = this.index();
-    return i < 0 ? 0 : (i + 1) / SLIDES.length;
-  });
 
   private touchStartX = 0;
 
