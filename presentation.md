@@ -401,149 +401,148 @@ template → templateFn
 ```typescript
 // Input
 @Component({
-  template: `<h1>{{ count }}</h1>`
+  template: `<h1>{{ name }}</h1>`
 })
-export class Count {
-  count = 0;
+export class App {
+  name = 'John';
 }
 ```
 
 ```typescript
 // Compiled output
-function Count_Template(rf, ctx) {
+function App_Template(rf, ctx) {
   if (rf & 1) {
     ɵɵelementStart(0, 'h1');
     ɵɵtext(1);
     ɵɵelementEnd();
   }
+
   if (rf & 2) {
     ɵɵadvance(1);
-    ɵɵtextInterpolate(ctx.count);
+    ɵɵtextInterpolate(ctx.name);
   }
 }
 ```
 
 > **Speaker note:**
-> "So here's what the compiler actually outputs for `<h1>{{ count }}</h1>`.
+> "Let's make that template function concrete with a tiny example.
 >
-> Two arguments: rf is the render flags, ctx is your component instance.
+> `rf` is the render flag. For our purpose, just read it as two modes: create and update.
 >
-> rf is a bitmask. rf & 1 — creation phase. rf & 2 — update phase.
+> `ctx` is the component instance, so `ctx.name` is the `name` property from our class.
 >
-> Creation phase: Angular builds the real DOM. ɵɵelementStart creates the h1 at slot 0. ɵɵtext creates the text node at slot 1. ɵɵelementEnd closes it.
+> The first block is the creation block. It creates the DOM nodes once.
 >
-> Update phase: ɵɵadvance(1) moves the internal pointer to slot 1 — the text node. Then ɵɵtextInterpolate evaluates ctx.count and handles the DOM update.
+> The second block is the update block. This is the part that runs during change detection.
 >
-> Creation runs once — ever. Update runs on every single change detection pass."
+> And the important line is `ɵɵtextInterpolate(ctx.name)`, because this is where Angular reads the current value of the binding."
 
 ---
 
-## Slide 3.5 — LView: Angular's Internal View
+## Slide 3.5 — LView: Where Angular Remembers Values
+
+```text
+LView = internal storage for a view
+
+LView [
+  ...
+  h1 text node,
+  component instance,
+  last seen value for {{ name }}: "John",
+  ...
+]
+```
 
 > **Speaker note:**
-> "Before we trace what happens in the update phase, I need to introduce one data structure: LView.
+> "Now we need one more piece: where does Angular keep the previous value of a binding?
 >
-> Every component has one. LView is a flat array — Angular's internal storage for a view.
+> Angular stores that previous value inside something called `LView`.
 >
-> It stores everything that view needs: the real DOM nodes, the component instance, and the previous binding values.
+> You can think of `LView` as Angular's internal storage for this view.
 >
-> One component. One LView.
+> Technically, it is an array, but the important idea is what it stores.
 >
-> Remember when I said 'every binding has memory'? That memory is in LView. Slot 0 is the h1 node. Slot 1 is the text node. And further along in the array, Angular keeps the last value it saw for each binding.
+> It keeps references to DOM nodes, the component instance, and the last value Angular saw for each binding.
 >
-> That's where the comparison lives."
+> So for `{{ name }}`, Angular has a place where it can remember: last time, this was `"John"`.
+>
+> That memory is what makes comparison possible."
 
 ---
 
-## Slide 3.6 — The Template Function Is Angular's `render()`
+## Slide 3.6 — How a Binding Update Reaches the DOM
+
+```text
+ɵɵtextInterpolate(ctx.name)
+        ↓
+bindingUpdated(...)
+        ↓
+changed?
+  ├─ no  → stop
+  └─ yes → updateTextNode(...)
+              ↓
+           renderer.setValue(...)
+              ↓
+           DOM changes
+```
 
 > **Speaker note:**
-> "So the template function has two jobs.
+> "Now let's follow the update path.
 >
-> The creation block runs once. It creates the DOM nodes and stores them in `LView`.
+> The template function calls `ɵɵtextInterpolate(ctx.name)`.
 >
-> The update block runs on every change detection pass.
+> Inside that interpolation work, Angular runs a binding check with `bindingUpdated(...)`.
 >
-> It reads values from the component instance, compares bindings, and updates the DOM when needed.
+> `bindingUpdated(...)` compares the current value with the last value stored in `LView`.
 >
-> This is Angular's version of the `render()` function from our vanilla JavaScript example.
+> If it returns `false`, the binding is unchanged, so the update path stops.
 >
-> The difference is: we did not write it by hand. Angular generated it from our template."
+> If it returns `true`, Angular has stored the new value, and the text update can continue: `updateTextNode(...)`, `renderer.setValue(...)`, and the DOM changes.
+>
+> This is Angular's generated version of the `render()` function from our plain JavaScript example.
+>
+> But Angular only writes to the DOM when the binding actually changed."
 
 ---
 
-## Slide 3.7 — How a Binding Update Reaches the DOM
-
-> **Speaker note:**
-> "Let's trace the whole chain — from ɵɵtextInterpolate all the way down to the actual DOM write.
->
-> ɵɵtextInterpolate(ctx.count)
->   → ɵɵtextInterpolate1('', ctx.count, '')
->   → interpolation1(lView, '', ctx.count, '')       ← bindingUpdated is called here
->   → textBindingInternal(lView, getSelectedIndex(), interpolated)
->   → getNativeByIndex(index, lView)                 ← gets the real text node from LView
->   → updateTextNode(lView[RENDERER], textNode, value)
->   → renderer.setValue(textNode, value)
->   → node.nodeValue = value                         ← the real browser DOM write
->
-> This is where the DOM actually changes. Not in a virtual tree. Right here.
->
-> And the important moment is interpolation1 — that's where bindingUpdated runs. It reads the previous value from LView, compares it to the new value. Equal? The whole rest of the chain is skipped entirely. No DOM write at all.
->
-> The comparison isn't just an optimization — it's the gate. Everything below it only happens if the value actually changed."
-
-**Transition:**
-
-> "So every binding in the template has a slot in LView for its previous value. Let's look at that more directly."
-
----
-
-## Slide 3.8 — Every Binding Has Memory
+## Slide 3.7 — The Binding Check
 
 ```typescript
-@Component({
-  template: `<h1>{{ count }}</h1>`
-})
-export class CounterComponent {
-  count = 0;
+function bindingUpdated(lView, bindingIndex, newValue) {
+  const oldValue = lView[bindingIndex];
+
+  if (Object.is(oldValue, newValue)) {
+    return false;
+  }
+
+  lView[bindingIndex] = newValue;
+  return true;
 }
 ```
 
 ```text
-Template binding:
-
-{{ count }}
-
-Angular stores:
-
-previous value: 0
-```
-
-```text
-Next change detection pass:
-
-new value === previous value?
-        ↓
-yes → skip DOM update
-no  → update DOM and store new value
+false → binding is unchanged
+true  → binding changed; update path can continue
 ```
 
 > **Speaker note:**
-> "Here's something that surprised me when I first learned this — Angular doesn't just re-render everything on every check.
+> "So what does `bindingUpdated(...)` actually do?
 >
-> It remembers.
+> It reads the old value from `LView`.
 >
-> Every binding has a slot in LView where Angular stores the last value it saw. So when it evaluates `{{ count }}` again, it's not just reading the value — it's comparing. Did this produce something different from last time?
+> Then it compares that old value with the new value Angular just read from the template function.
 >
-> Same value? Skip the DOM update entirely.
+> If the value is unchanged, Angular can stop there. Nothing else needs to happen for this binding.
 >
-> Different value? Update the DOM and store the new value.
+> If the value changed, Angular remembers the new value in `LView`.
 >
-> That's the whole loop. That's what change detection actually is — Angular asking that question for every binding, every pass."
+> That stored value becomes the baseline for the next change detection pass.
+>
+> This is the core loop of change detection: read the binding, compare it with the last value, and remember the new value when it changes."
 
 **Transition:**
 
-> "Now let's look at a simplified version of what Angular is doing internally."
+> "In development mode, Angular asks one stricter question: after checking, are these binding values still stable?"
 
 ---
 
