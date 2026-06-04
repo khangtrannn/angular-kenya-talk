@@ -55,6 +55,7 @@ const SWIPE_THRESHOLD_PX = 50;
         background: #f9eeda;
       }
       .zone {
+        appearance: none;
         position: fixed;
         top: 0;
         bottom: 0;
@@ -67,9 +68,8 @@ const SWIPE_THRESHOLD_PX = 50;
         z-index: 5;
         -webkit-tap-highlight-color: transparent;
       }
-      .zone:focus-visible {
-        outline: 2px solid #f6c945;
-        outline-offset: -4px;
+      .zone:focus {
+        outline: none;
       }
       .zone-prev {
         left: 0;
