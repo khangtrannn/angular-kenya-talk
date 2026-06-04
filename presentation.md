@@ -46,9 +46,7 @@
 ## Slide 1.3 — Stack Overflow
 
 > **Speaker note:**
-> "I did what every developer did, I went to our old friend Stack Overflow.
->
-> I found the this solution that wrap the mutation in a `setTimeout`.
+> "I went to Stack Overflow and found the this solution that wrap the mutation in a `setTimeout`.
 >
 > I tried it, and the error disappeared like a magic.
 >
