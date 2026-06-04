@@ -301,15 +301,13 @@ template → templateFn
 ```
 
 > **Speaker note:**
-> "When Angular reaches a component, what it actually checks is the component's template function.
+> "When Angular reaches a component, it needs to know two things.
 >
-> The key idea is that Angular does not treat the template as a string at runtime.
+> Which values should it read from the component?
 >
-> It compiles the template into a JavaScript function.
+> And where should those values go in the DOM?
 >
-> So during change detection, Angular runs that generated function.
->
-> That function knows which values to read from the component, and which parts of the DOM those values belong to."
+> The thing that answers both questions is the template function: `templateFn`."
 
 ---
 
@@ -342,7 +340,9 @@ function App_Template(rf, ctx) {
 ```
 
 > **Speaker note:**
-> "Let's make that template function concrete with a tiny example.
+> "Now let's open that `templateFn` and see how it answers those two questions.
+>
+> Here is a simplified version of what the compiler generates for a tiny template.
 >
 > `rf` is the render flag. For our purpose, just read it as two modes: create and update.
 >
@@ -389,42 +389,14 @@ LView [
 
 ## Slide 3.6 — How a Binding Update Reaches the DOM
 
-```text
-ɵɵtextInterpolate(ctx.name)
-        ↓
-bindingUpdated(...)
-        ↓
-changed?
-  ├─ no  → stop
-  └─ yes → updateTextNode(...)
-              ↓
-           renderer.setValue(...)
-              ↓
-           DOM changes
-```
-
-> **Speaker note:**
-> "Now let's follow the update path.
->
-> The template function calls `ɵɵtextInterpolate(ctx.name)`.
->
-> Inside that interpolation work, Angular runs a binding check with `bindingUpdated(...)`.
->
-> `bindingUpdated(...)` compares the current value with the last value stored in `LView`.
->
-> If it returns `false`, the binding is unchanged, so the update path stops.
->
-> If it returns `true`, Angular has stored the new value, and the text update can continue: `updateTextNode(...)`, `renderer.setValue(...)`, and the DOM changes.
->
-> This is Angular's generated version of the `render()` function from our plain JavaScript example.
->
-> But Angular only writes to the DOM when the binding actually changed."
-
----
-
-## Slide 3.7 — The Binding Check
-
 ```typescript
+// Simplified mental model
+function ɵɵtextInterpolate(value) {
+  if (bindingUpdated(lView, bindingIndex, value)) {
+    updateDOM(value);
+  }
+}
+
 function bindingUpdated(lView, bindingIndex, newValue) {
   const oldValue = lView[bindingIndex];
 
@@ -437,23 +409,20 @@ function bindingUpdated(lView, bindingIndex, newValue) {
 }
 ```
 
-```text
-false → binding is unchanged
-true  → binding changed; update path can continue
 ```
 
 > **Speaker note:**
-> "So what does `bindingUpdated(...)` actually do?
+> "Now let's follow the update path.
 >
-> It reads the old value from `LView`.
+> The template function calls `ɵɵtextInterpolate(ctx.name)`.
 >
-> Then it compares that old value with the new value Angular just read from the template function.
+> Inside that interpolation work, Angular runs a binding check with `bindingUpdated(...)`.
 >
-> If the value is unchanged, Angular can stop there. Nothing else needs to happen for this binding.
+> `bindingUpdated(...)` reads the old value from `LView` and compares it with the new value Angular just read from the template function.
 >
-> If the value changed, Angular remembers the new value in `LView`.
+> If the value is unchanged, it returns `false`, and the update path stops. Nothing needs to touch the DOM.
 >
-> That stored value becomes the baseline for the next change detection pass.
+> If the value changed, Angular stores the new value in `LView` and returns `true`.
 >
 > This is the core loop of change detection: read the binding, compare it with the last value, and remember the new value when it changes."
 

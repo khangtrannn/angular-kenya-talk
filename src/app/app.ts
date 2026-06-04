@@ -32,12 +32,14 @@ const SWIPE_THRESHOLD_PX = 50;
       class="zone zone-prev"
       (click)="prev()"
       aria-label="Previous slide"
+      tabindex="-1"
     ></button>
     <button
       type="button"
       class="zone zone-next"
       (click)="next()"
       aria-label="Next slide"
+      tabindex="-1"
     ></button>
 
     <footer class="tag">Khang Tran · Angular Kenya 2026</footer>
