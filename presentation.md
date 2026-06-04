@@ -19,13 +19,14 @@
 > "Hi everyone, I’m Khang, a software engineer from Vietnam.
 >
 >
-> This is my first time speaking at a webinar like this, so thank you so much to the Angular Kenya team for setting everything up and making this happen.
+> This is my very first time speaking at a webinar like this, so thank you so much to the Angular Kenya team for setting everything up and making this happen.
 >
 > So, what I want to do today is kind of take you guys along on some of the things I've learned about Angular Change Detection and Signals.
 >
-> And I am not an expert in any of this, so this is going to be me taking you along on my learning journey and nothing more.
+> And I am not an expert in any of this, so this is going to be me taking you guys along on my learning journey and nothing more.
 >
-> So how did I end up here today talking to you guys about this topic?"
+> I would like start with the reason why I end up here talking about this topic today?
+
 
 ---
 
@@ -34,22 +35,24 @@
 > **Speaker note:**
 > "The journey started with this kind of error message.
 >
-> If you have worked with Angular for a while, I bet you have encountered this error at least once:
+> If you have worked with Angular for a while, I bet you have encountered this kind of error at least once:
 >
-> `ExpressionChangedAfterItHasBeenCheckedError`."
+> `ExpressionChangedAfterItHasBeenChecked`.
+>
+> And when it happened to me, I had no idea what Angular was actually complaining about."
 
 ---
 
 ## Slide 1.3 — Stack Overflow
 
 > **Speaker note:**
-> "I did what every developer did: I searched Stack Overflow.
+> "I did what every developer did, I went to our old friend Stack Overflow.
 >
-> I found the magic solution: wrap the mutation in a `setTimeout`.
+> I found the this solution that wrap the mutation in a `setTimeout`.
 >
-> I tried it, and the error disappeared.
+> I tried it, and the error disappeared like a magic.
 >
-> But then I reached to the comment section, and they were basically saying: please don't do this.
+> But then I reached to the comment section, and they were basically saying: please don't do this, it is not a best practice.
 >
 > That was the confusing part.
 >
@@ -75,7 +78,7 @@
 > **Speaker note:**
 > "Then, back in 2023, when the Angular renaissance started by introducing a new reactive primitive for the framework.
 >
-> A lot of things in that RFC were interesting, but this line caught my attention:
+>A lot of ideas in that RFC were interesting, but one line really stood out to me.
 >
 > 'Better guardrails to avoid common pitfalls that lead to poor change detection performance and avoid common pain points such as ExpressionChangedAfterItHasBeenChecked errors.'
 >
@@ -85,7 +88,7 @@
 >
 > That question is what pushed me to go deeper into Angular change detection.
 >
-> To answer those questions, we had to understand what Angular is actually doing during change detection and build the mental model from the ground up."
+> To answer those questions, we had to understand what Angular is actually doing during change detection by building the mental model from the ground up."
 
 ---
 
@@ -102,13 +105,13 @@ State → synchronization → UI
 ```
 
 > **Speaker note:**
-> "Before we talk about Signals, let's step back and define change detection.
+> "Before we talk about Signals, let's step back to a basic question "What is change detection".
 >
 > At the simplest level, change detection is Angular keeping your application state and the rendered UI in sync.
 >
 > When state changes, the UI should reflect that change.
 >
-> This is simple idea but the hard part is deciding when Angular should run change detection, and what part of the UI it should update.
+> This is simple idea but there are two questions that Angular need to answer when Angular should run change detection, and what part of the UI it should update.
 >
 > To make that concrete, let's start with a tiny counter example."
 
@@ -140,11 +143,12 @@ render(); // initial sync
 >
 > We have some UI: this `span`.
 >
-> And then we have a `render()` function that connects them.
 >
-> The important thing is: the DOM does not know that `state.count` exists.
->
+> The important thing is: the DOM does not know that `state` exists.
+
 > So changing the state does not automatically update the screen.
+
+> Therefore, we need to have a `render()` function to connects them.
 >
 > The only time the UI gets synchronized is when we call `render()`."
 
@@ -407,8 +411,6 @@ function bindingUpdated(lView, bindingIndex, newValue) {
   lView[bindingIndex] = newValue;
   return true;
 }
-```
-
 ```
 
 > **Speaker note:**
