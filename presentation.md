@@ -39,17 +39,17 @@ Signals:
 ## Slide 1.1 — Introduction
 
 > **Speaker note:**
-> "Hi everyone, I'm Khang, a software engineer from Vietnam.
+> "Hi everyone, I’m Khang, a software engineer from Vietnam.
 >
-> Besides that, I'm currently on a career break, and during this time I'm building my Angular UI library, `@ng-brutalism/ui`.
+> I’m in a career break chapter at the moment, and I’m using this opportunity to go deeper into Angular by building my own Angular UI library.
 >
-> This is actually my first time speaking at a webinar.
+> This is my first time speaking at a webinar like this, so thank you so much to the Angular Kenya team for setting everything up and making this happen.
 >
 > So, what I want to do today is kind of take you guys along on some of the things I've learned about Angular Change Detection and Signals.
 >
 > And I am not an expert in any of this, so this is going to be me taking you along on my learning journey and nothing more.
 >
-> So how did I end up being here talking to you guys about Angular Change Detection today?"
+> So how did I end up being here today talking to you guys about this topic?"
 
 ---
 
@@ -84,8 +84,7 @@ Signals:
 >
 > First: why does Angular throw `NG0100`?
 >
-> Second: why does `setTimeout` make it disappear, while still being considered a bad practice?
->
+> Second: why does `setTimeout` make it disappear, while still being considered a bad practice?"
 
 ---
 
@@ -108,8 +107,8 @@ Signals:
 >
 > That question is what pushed me to go deeper into Angular change detection.
 >
-
-> To answer those, we had to understand what Angular is actually doing during change detection."
+> To answer those, we had to understand what Angular is actually doing during change detection.
+>
 > So let's build the mental model from the ground up."
 
 ---
@@ -235,7 +234,7 @@ Element.prototype.addEventListener = function(eventName, callback) {
   return originalAddEventListener.call(this, eventName, () => {
     callback();
 
-    // Angular: something may have changed,
+    // Angular: something might have changed,
     // let's synchronize the UI
     notifyAngular();
   });
@@ -365,6 +364,8 @@ Angular checks top-down:
 > Because Zone.js does not tell Angular what changed, Angular has to check broadly.
 >
 > But now we can ask the more interesting question: when Angular reaches one component, what does it actually check?"
+
+---
 
 ## Slide 3.2 — How Does Angular Perform Change Detection for a Component?
 
@@ -546,50 +547,13 @@ true  → binding changed; update path can continue
 
 ---
 
-## Slide 3.9 — The Binding Check
-
-```typescript
-function bindingUpdated(lView, bindingIndex, newValue) {
-  const oldValue = lView[bindingIndex];
-
-  if (newValue !== oldValue) {
-    lView[bindingIndex] = newValue;
-    updateDOM(newValue);
-    return true;
-  }
-
-  return false;
-}
-```
-
-```text
-lView = Angular's internal storage for this view
-
-bindingIndex = where this binding's previous value is stored
-```
-
-> **Speaker note:**
-> "Simplified, but this is the actual mechanism.
->
-> oldValue comes out of LView at the binding's slot. If newValue is different — write the new value back to LView, update the DOM, return true. Same value — do nothing, return false.
->
-> That's it. That runs for every binding, every pass.
->
-> Now — in dev mode — Angular runs this twice. And that second run is exactly where NG0100 comes from."
-
-**Transition:**
-
-> "Development mode asks a stricter question: after Angular finishes checking, are the values still stable?"
-
----
-
 # SECTION 4 — NG0100 Explained
 
 **Target time: 10–12 min**
 
 ---
 
-## Slide 4.1 — Dev Mode Double Checks Stability
+## Slide 4.1 — Dev Mode and the Second Check
 
 ```typescript
 // First pass
@@ -609,19 +573,17 @@ checkNoChanges:
 ```
 
 > **Speaker note:**
-> "In dev mode, Angular doesn't just run detectChanges once.
+> "In development mode, Angular takes that binding check one step further.
 >
-> It runs a second pass right after — checkNoChanges.
+> After the normal change detection pass, it runs another pass immediately.
 >
-> The first pass is allowed to update the DOM. That's normal.
+> The first pass is allowed to update `LView` and the DOM.
 >
-> The second pass is not allowed to find anything new. It just asks: if I re-evaluate all the bindings right now, do I still get the same values I just stored?
+> The second pass is different. It re-runs the template, but it expects every binding to produce the same value as before.
 >
-> Yes — great, everything is stable.
+> If the values are the same, Angular knows the view is stable.
 >
-> No — something changed after Angular already checked it. NG0100.
->
-> This isn't random. It's Angular catching a very specific violation. Let's go back to the code and see exactly what triggers it."
+> If a binding produces a different value, Angular throws `NG0100`."
 
 **Transition:**
 
@@ -648,63 +610,65 @@ export class AppComponent implements AfterViewInit {
 Initial value:
 name = 'John'
 
-Template:
+Template reads:
 {{ name }}
+
+Lifecycle hook:
+ngAfterViewInit()
 ```
 
 > **Speaker note:**
-> "Okay — this is the code that sent me to Stack Overflow.
+> "Now let's go back to the code that sent me to Stack Overflow.
 >
-> I remember looking at it thinking: what is wrong here? The data is fine. The value ends up as 'Doe'. Nothing looks broken.
+> At first glance, this code feels pretty normal.
 >
-> But Angular was furious.
+> We start with `name = 'John'`, the template reads `name`, and after the view initializes, we assign `name = 'Doe'`.
 >
-> The value is not the problem. The timing is."
-
-**Transition:**
-
-> "Let's trace the timeline."
+> The final value, `Doe`, is perfectly valid. The interesting detail is where the assignment happens: inside `ngAfterViewInit`.
+>
+> That hook runs after Angular has already read this template binding once in the current pass.
+>
+> So to understand the error, let's trace the timeline."
 
 ---
 
 ## Slide 4.3 — Why NG0100 Happens
 
 ```text
-Change detection starts
-  ↓
-Angular checks template
-  ↓
-{{ name }} evaluates to "John"
-  ↓
-Angular stores "John"
-  ↓
-ngAfterViewInit runs
-  ↓
-name changes to "Doe"
-  ↓
-Dev mode checkNoChanges runs
-  ↓
-{{ name }} now evaluates to "Doe"
-  ↓
-Angular expected "John"
-  ↓
-NG0100 ❌
+1. First pass
+detectChanges
+
+{{ name }} → 'John'
+Angular remembers 'John'
+
+2. Lifecycle hook
+ngAfterViewInit()
+
+this.name = 'Doe'
+
+3. Dev-mode second pass
+checkNoChanges
+
+{{ name }} → 'Doe'
+Angular expected 'John'
+
+NG0100
+
+{{ name }} changed after it was checked.
 ```
 
 > **Speaker note:**
-> "Walk through this with me.
+> "Let's walk through it slowly.
 >
-> Angular starts the change detection pass. It checks the template. `{{ name }}` evaluates to 'John'. Angular stores 'John' in LView.
+> First pass: Angular reads `{{ name }}`. At this moment, `name` is `'John'`, so Angular remembers `'John'` in `LView`.
 >
-> Then ngAfterViewInit runs — after the view has been checked, that's literally when that lifecycle hook fires.
+> Then the lifecycle hook runs. `ngAfterViewInit` assigns `this.name = 'Doe'`.
 >
-> name gets set to 'Doe'.
+> Now dev mode does the second pass. It reads the same binding again. But this time, it gets `'Doe'`.
 >
-> Now dev mode runs checkNoChanges. It evaluates `{{ name }}` again. Gets 'Doe'. But Angular stored 'John'.
+> And that is the problem. Angular was expecting the value it had just checked: `'John'`.
 >
-> Angular says: this binding changed after I already checked it.
->
-> That is NG0100. The error name isn't cryptic at all once you understand the model — it's completely literal."
+> So when Angular says `ExpressionChangedAfterItHasBeenCheckedError`, it is describing exactly what happened: `{{ name }}` changed after it was checked."
 
 **Transition:**
 
@@ -724,46 +688,34 @@ ngAfterViewInit() {
 
 ```text
 Current change detection cycle:
-  ↓
-Angular checks name = "John"
-  ↓
-ngAfterViewInit registers setTimeout
-  ↓
-name is still "John"
-  ↓
-checkNoChanges passes ✅
+Angular reads {{ name }} → 'John'
+ngAfterViewInit schedules callback
+callback has not run yet
+checkNoChanges sees 'John' again ✅
 
-Later, in a new task:
-  ↓
+Later, in a new browser task:
 setTimeout callback runs
-  ↓
-name changes to "Doe"
-  ↓
-Zone.js notifies Angular
-  ↓
-Angular runs another tick()
-  ↓
-UI updates
+this.name = 'Doe'
+Zone.js triggers another tick()
+UI updates to 'Doe'
+
+Takeaway:
+setTimeout moves the mutation into the next task.
+It works by escaping the current check, not by fixing the model.
 ```
 
 > **Speaker note:**
-> "And now — finally — I can explain why setTimeout appears to work. Because when I found this fix on Stack Overflow, I used it, the error went away, and I had no idea why.
+> "This is the part I wish I had understood from the very beginning.
 >
-> Here's why.
+> `setTimeout` does not make the assignment safer. It moves the assignment out of the current change detection cycle and into a later browser task.
 >
-> You're not fixing anything. You're just moving the mutation out of the current change detection cycle entirely.
+> During the current cycle, Angular only registers the timeout. The callback has not run yet, so `name` is still `'John'`.
 >
-> During this cycle: name stays 'John'. checkNoChanges runs. No change. No error.
+> When `checkNoChanges` runs, it sees `'John'` again, so there is no NG0100.
 >
-> Later — in a completely separate browser task — the timeout fires. name becomes 'Doe'. Zone.js sees that task finish, tells Angular something changed, Angular runs another tick(), and the UI updates.
+> Later, the timeout callback runs in a new browser task. It assigns `this.name = 'Doe'`. After that task, Zone.js triggers another `tick()`, and Angular updates the UI.
 >
-> So yes, it works. But only because you escaped the check, not because you fixed the underlying problem.
->
-> That's why everyone in those Stack Overflow comments says 'don't do this'. You're working around Angular's model, not with it."
-
-**Transition:**
-
-> "That is why `setTimeout` feels like magic. But now we can say exactly what it does: it delays the mutation until Angular's current stability check is over."
+> So yes, it works. But it works by escaping the current check, not by fixing the model."
 
 ---
 
@@ -790,7 +742,7 @@ NG0100 is the error you get when something violates that.
 ```
 
 > **Speaker note:**
-> "Now we can answer the third question we asked at the beginning.
+> "Now we can answer the first question from the beginning.
 >
 > Why does Angular throw ExpressionChangedAfterItHasBeenCheckedError?
 >
@@ -800,7 +752,7 @@ NG0100 is the error you get when something violates that.
 >
 > It expects that one pass should be stable. If a value was already checked and something mutates it afterward — in the same pass — Angular has no way to honor that without walking the tree again.
 >
-> In the old model, it doesn't. It throws instead.
+> In this checking model, Angular does not restart the whole pass just because a value changed after it was already checked. In dev mode, it throws instead.
 >
 > Angular is not angry because the value changed. Angular is angry because the value changed in the wrong direction — after the check had already moved past it.
 >
@@ -825,7 +777,7 @@ Zone.js model:
 
 A callback finished
         ↓
-Something may have changed
+Something might have changed
         ↓
 Angular checks broadly
         ↓
@@ -847,7 +799,7 @@ Refresh affected views
 > **Speaker note:**
 > "Okay — here's the big picture comparison. And I think once you see this it just clicks.
 >
-> Zone.js gives Angular timing information. A callback finished, so something may have changed.
+> Zone.js gives Angular timing information. A callback finished, so something might have changed.
 >
 > But Zone.js cannot tell Angular which state changed, or which view depends on that state. So conceptually, Angular has to check broadly and expect that one pass is stable.
 >
@@ -1084,6 +1036,35 @@ while (dirty) {
 ---
 
 ## Slide 5.7 — Signals Change the Timing Story
+
+```text
+Class property version:
+
+check {{ name }} → "John"
+        ↓
+ngAfterViewInit mutates name to "Doe"
+        ↓
+Angular discovers it too late
+        ↓
+NG0100
+```
+
+```text
+Signal version:
+
+check {{ name() }} → "John"
+        ↓
+ngAfterViewInit calls name.set("Doe")
+        ↓
+Angular knows the signal changed
+        ↓
+affected view is refreshed
+```
+
+```text
+Signals make updates explicit:
+Angular does not have to discover the change too late.
+```
 
 > **Speaker note:**
 > "Let's bring this back to where we started.
