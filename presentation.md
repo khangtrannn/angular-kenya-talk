@@ -19,7 +19,7 @@
 > "Hi everyone, I’m Khang, a software engineer from Vietnam.
 >
 >
-> This is my very first time speaking at a webinar like this, so thank you so much to the Angular Kenya team for setting everything up and making this happen.
+> This is my very first time speaking at a webinar like this, so I would like to thanks to the Angular Kenya team for setting everything up and making this happen.
 >
 > So, what I want to do today is kind of take you guys along on some of the things I've learned about Angular Change Detection and Signals.
 >
@@ -48,24 +48,19 @@
 > **Speaker note:**
 > "I went to Stack Overflow and found the this solution that wrap the mutation in a `setTimeout`.
 >
-> I tried it, and the error disappeared like a magic.
+> I tried it, and the error disappeared like a magic and I have no idea why it worked.
 >
-> But then I reached to the comment section, and they were basically saying: please don't do this, it is not a best practice.
->
-> That was the confusing part.
->
-> If it fixed the error, why was it wrong?"
+
+>Especially when I reached the comment section, people were basically saying that fixing the error like that is not considered best practice.
 
 ---
 
 ## Slide 1.4 — Two Important Questions
 
 > **Speaker note:**
-> "So that became the starting point for this talk.
+> "So that became the starting point for this talk. It left me with two questions.
 >
-> It left me with two questions.
->
-> First: why does Angular throw `NG0100` in the first place?
+> First: why does Angular throw this kind of message in the first place?
 >
 > Second: why does `setTimeout` make the error disappear, but still feel like the wrong solution?"
 
@@ -80,11 +75,11 @@
 >
 > 'Better guardrails to avoid common pitfalls that lead to poor change detection performance and avoid common pain points such as ExpressionChangedAfterItHasBeenChecked errors.'
 >
-> And that confused me again.
+> And to be honest that confused me again.
 >
-> How could a new reactive primitive help Angular avoid the ExpressionChangedAfterItHasBeenChecked errors?
+> How could a new reactive primitive help Angular avoid this kind of errors?
 >
-> That question is what pushed me to go deeper into Angular change detection.
+> These questions are what pushed me to go deeper into Angular change detection.
 >
 > To answer those questions, we had to understand what Angular is actually doing during change detection by building the mental model from the ground up."
 
@@ -174,21 +169,17 @@ fetch('/api/count')
 ```
 
 > **Speaker note:**
-> "So now the rule becomes: whenever state changes, something has to synchronize the UI.
+> "So to make sure everything stays in sync, whenever state changes, we have to call the `render()` function manually.
 >
-> In a tiny demo, we can do that ourselves by calling `render()`.
+> Now imagine this in a real application.
 >
-> But real apps do not have just one place where state changes.
+> State can change from many places, like a click event, a timer, a Promise, or an API response.
 >
-> State can change from a click, a timer, a Promise, or an API response.
->
-> So now the problem is not the counter anymore. The problem is remembering every entry point where the app can change.
->
-> Forget one of them, and the UI falls behind.
+> That means we have to remember to call `render()` in all of those places.
 >
 > And this is the problem Angular needed to solve before Signals:
 >
-> how do we know when the app might need to be synchronized?"
+> how does Angular know when the application might need to update the UI?"
 
 **Transition:**
 
@@ -227,21 +218,29 @@ XMLHttpRequest(...)
 > **Speaker note:**
 > "This is where Zone.js comes in.
 >
-> Zone.js wraps the common places where work enters the app: clicks, timers, Promises, HTTP responses.
+> Instead of making us manually tell Angular every time state might have changed, Angular uses Zone.js to intercept the common async callbacks in the browser.
 >
-> After that work finishes, it notifies Angular.
+> Things like click events, timers, Promises, and HTTP responses.
 >
-> The important detail is that Zone.js is not saying: this exact state changed.
+> When one of those callbacks runs, Zone.js lets it finish first, then notifies Angular.
 >
-> It is saying: something just happened, so something might have changed.
+> The important detail is that Zone.js does not update the UI by itself.
 >
-> That gives Angular the first answer: when to run change detection.
+> And it does not tell Angular exactly what state changed.
 >
-> But it does not answer the second question: what actually changed?"
+> It only tells Angular: something just happened, so something might have changed.
+>
+> That gives Angular the first answer:
+>
+> when to run change detection.
+>
+> But it still does not answer the second question:
+>
+> what actually changed?"
 
 **Transition:**
 
-> "So what happens after Zone.js tells Angular that something might have changed? Angular runs one central change detection pass: `ApplicationRef.tick()`."
+> "That notification is only the starting point."
 
 ---
 
@@ -282,13 +281,9 @@ Angular checks top-down:
 ```
 
 > **Speaker note:**
-> "So this is the handoff.
+> "Once Angular receives that notification, the method at the center is `ApplicationRef.tick()`.
 >
-> Zone.js only tells Angular that some work finished, so something might have changed.
->
-> Angular responds by running `ApplicationRef.tick()`.
->
-> Because Zone.js does not deliver any information about what changed, Angular needs to start change detection from the root component and walk down the component tree.
+> Because the notification does not include what changed, Angular needs to start change detection from the root component and walk down the component tree.
 >
 > Parent first. Then child components. Top to bottom.
 >
@@ -344,17 +339,21 @@ function App_Template(rf, ctx) {
 > **Speaker note:**
 > "Now let's open that `templateFn` and see how it answers those two questions.
 >
-> Here is a simplified version of what the compiler generates for a tiny template.
+> Here is a simplified version of what Angular's compiler generates for our example.
 >
-> `rf` is the render flag. For our purpose, just read it as two modes: create and update.
+> The first block is responsible for creation. It creates the DOM structure once.
+>
+> The second block is responsible for updates. This is the part Angular runs during change detection.
 >
 > `ctx` is the component instance, so `ctx.name` is the `name` property from our class.
 >
-> The first block is the creation block. It creates the DOM nodes once.
+> The important part is inside `ɵɵtextInterpolate(...)`: Angular reads `ctx.name`.
 >
-> The second block is the update block. This is the part that runs during change detection.
+> That read is the binding read. It is how Angular gets the current value from the component.
 >
-> And the important line is `ɵɵtextInterpolate(ctx.name)`, because this is where Angular reads the current value of the binding."
+> So this function answers both questions: read `ctx.name`, and write it into the text node inside the `h1`.
+>
+> The next question is: where does Angular remember the previous value, so it can know whether this text node actually needs to change?"
 
 ---
 
@@ -373,9 +372,7 @@ LView [
 ```
 
 > **Speaker note:**
-> "Now we need one more piece: where does Angular keep the previous value of a binding?
->
-> Angular stores that previous value inside something called `LView`.
+> "Angular stores that previous value inside something called `LView`.
 >
 > You can think of `LView` as Angular's internal storage for this view.
 >

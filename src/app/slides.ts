@@ -30,7 +30,7 @@ export const SLIDES: Slide[] = [
   { slug: 'push-poll-pull', title: 'Push Dirtiness, Pull Values', image: 'push-poll-pull.png' },
   { slug: 'the-same-example-with-signals', title: 'The Same Example with Signals', image: 'the-same-example-with-signals.png' },
   { slug: 'from-one-pass-to-synchronization', title: 'From One Pass to Synchronization', image: 'from-one-pass-to-synchronization.png' },
-  { slug: 'signals-change-the-timing-story', title: 'Signals Change the Timing Story', image: 'signals-change-the-timing-story.png' },
+  // { slug: 'signals-change-the-timing-story', title: 'Signals Change the Timing Story', image: 'signals-change-the-timing-story.png' },
   { slug: 'thank-you', title: 'Thank You', image: 'thank-you.png' },
 ];
 
